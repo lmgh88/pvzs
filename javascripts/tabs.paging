@@ -1,0 +1,325 @@
+/**
+*tab分页控件
+*Depend on:jquery.ui.tabs.js
+*使用方法：$('#tabs').tabs().tabs('paging')
+*传入参数hideAddBtn:true不显示addBtn
+*传入参数addFunc绑定增加页签事件，传入listFunc绑定显示页签列表事件
+*传入参数activeOnButtonClick:true指定点击分页按钮时激活页签，否则采用类Excel的切换方式
+*新增tab方法：$('#tabs').tabs('add',{text:'新增表单',activeOnAdd:true,liAttr:{}}) //activeOnAdd：增加后自动激活,liAttr：需要为li添加的自定义属性
+*删除tab方法：$("**li").remove();$('#tabs').tabs('refresh');
+*传入addPlusFunc参数：新增按钮右侧显示按钮并绑定点击事件，addPlusTitle指定title属性
+*/
+$.extend($.ui.tabs.prototype, {
+    paging: function (options) {
+        options = options || {};
+        var self = this, initialized = false, resizeTimer = null, activeEx = 0,
+            windowHeight = $(window).height(), windowWidth = $(window).width();
+
+        function init() {
+            self.tablist.addClass("ul-ui-tabs-Paging");
+
+            self.tabsPanel = $('<div />').addClass('ui-tabs-paging-full');
+            self.scrollPanel = $('<div />').addClass('ui-tabs-paging-display')
+                .append(self.tabsPanel);
+            self.nextButton = $('<div ><div class="gg-tabs-icon gg-tabs-icon-paging-next" /></div>').addClass('ui-tabs-paging-right ui-state-default')
+                .hover(function () {
+                    self.nextButton.toggleClass('ui-state-hover');
+                })
+                .click(function (e) {
+                    e.preventDefault();
+                    if (options.activeOnButtonClick) {
+                        if (self.option('active') >= self.tabs.length - 1)
+                            return;
+                        self.element.tabs({ active: self.option('active') + 1 });
+                    } else {
+                        if (activeEx >= self.tabs.length - 1)
+                            return;
+                        activeEx++;
+                    }
+                    updateButtonState();
+                    var tabsPanelLeft = self.tabsPanel.position().left, offsetLeft = 0;
+                    if (tabsPanelLeft > 0) tabsPanelLeft = 0;
+                    if (options.activeOnButtonClick) {
+                        offsetLeft = tabsPanelLeft * -1 + self.active.prev().outerWidth(true);
+                    } else {
+                        offsetLeft = tabsPanelLeft * -1 + self.tabs.eq(activeEx - 1).outerWidth(true);
+                    }
+                    self.tabsPanel.stop();
+                    self.tabsPanel.animate({ left: -offsetLeft }, 'slow');
+                });
+
+            self.lastButton = $('<div ><div class="gg-tabs-icon gg-tabs-icon-paging-last" /></div>').addClass('ui-tabs-paging-right ui-state-default')
+                .hover(function () {
+                    self.lastButton.toggleClass('ui-state-hover');
+                })
+                .click(function (e) {
+                    e.preventDefault();
+                    if (options.activeOnButtonClick) {
+                        if (self.option('active') >= self.tabs.length - 1)
+                            return;
+                        self.element.tabs({ active: self.tabs.length - 1 });
+                    } else {
+                        if (activeEx >= self.tabs.length - 1)
+                            return;
+                        activeEx = self.tabs.length - 1;
+                    }
+                    updateButtonState();
+                    var tabsPanelWidth = 0, offsetLeft = 0;
+                    self.tabs.each(function () {
+                        tabsPanelWidth += $(this).outerWidth(true);
+                    });
+                    if (options.activeOnButtonClick) {
+                        offsetLeft = self.active.outerWidth(true) - tabsPanelWidth;
+                    } else {
+                        offsetLeft = self.scrollPanel.width() - tabsPanelWidth;
+                    }
+                    if (offsetLeft > 0) offsetLeft = 0;
+                    self.tabsPanel.stop();
+                    self.tabsPanel.animate({ left: offsetLeft }, 'fast');
+                });
+
+            self.prevButton = $('<div ><div class="gg-tabs-icon gg-tabs-icon-paging-prev" /></div>').addClass('ui-tabs-paging-right ui-state-default')
+                .hover(function () {
+                    self.prevButton.toggleClass('ui-state-hover');
+                })
+                .click(function (e) {
+                    e.preventDefault();
+                    if (options.activeOnButtonClick) {
+                        if (self.option('active') === 0)
+                            return;
+                        self.element.tabs({ active: self.option('active') - 1 });
+                    } else {
+                        if (activeEx === 0)
+                            return;
+                        activeEx--;
+                    }
+                    updateButtonState();
+                    var tabsPanelLeft = self.tabsPanel.position().left, offsetLeft = 0;
+                    if (tabsPanelLeft > 0) tabsPanelLeft = 0;
+                    if (options.activeOnButtonClick) {
+                        offsetLeft = tabsPanelLeft * -1 - self.active.next().outerWidth(true);
+                    } else {
+                        offsetLeft = tabsPanelLeft * -1 - self.tabs.eq(activeEx).outerWidth(true);
+                    }
+                    self.tabsPanel.stop();
+                    self.tabsPanel.animate({ left: -offsetLeft }, 'slow');
+                });
+
+            self.firstButton = $('<div ><div class="gg-tabs-icon gg-tabs-icon-paging-first" /></div>').addClass('ui-tabs-paging-right ui-state-default')
+                .hover(function () {
+                    self.firstButton.toggleClass('ui-state-hover');
+                })
+                .click(function (e) {
+                    e.preventDefault();
+                    if (options.activeOnButtonClick) {
+                        if (self.option('active') === 0)
+                            return;
+                        self.element.tabs({ active: 0 });
+                    } else {
+                        if (activeEx === 0)
+                            return;
+                        activeEx = 0;
+                    }
+                    updateButtonState();
+                    self.tabsPanel.stop();
+                    self.tabsPanel.animate({ left: 0 }, 'fast');
+                });
+
+            !options.hideAddBtn && (
+                self.addButton = $('<div ><div class="gg-tabs-icon gg-tabs-icon-newform" /></div>').addClass('ui-tabs-paging-left ui-state-default')
+                    .attr("title","新建")
+                    .hover(function() {
+                        self.addButton.toggleClass('ui-state-hover');
+                    }).click(function() {
+                        options.addFunc && options.addFunc.apply(this);
+                    })
+            );
+
+            if (options.addPlusFunc) {
+                var addPlus = $("<span>").addClass("addPlus addPlusHidden").append($("<span>"));
+                self.addButton.css("position", "relative").append(addPlus).on("mouseout", function() {
+                    addPlus.addClass("addPlusHidden");
+                }).on("mouseover", function() {
+                    addPlus.removeClass("addPlusHidden");
+                });
+                addPlus.click(function(e) {
+                    options.addPlusFunc.apply(this);
+                    e.stopPropagation();
+                });
+                options.addPlusTitle && addPlus.attr("title", options.addPlusTitle);
+            }
+
+            self.listButton = $('<div ><div class="gg-tabs-icon gg-tabs-icon-quicksearch" /></div>').addClass('ui-tabs-paging-left ui-state-default')
+               .attr("title", "快速选择")
+               .hover(function () {
+                   self.listButton.toggleClass('ui-state-hover');
+               }).click(function () {
+                   options.listFunc && options.listFunc.apply(this);
+               });
+        }
+
+        function update() {
+            destroy();
+            var tabsPanelWidth = 0;
+            self.tabs.each(function () {
+                tabsPanelWidth += $(this).outerWidth(true);
+            });
+            self.tablist.prepend(self.listButton);
+            !options.hideAddBtn && self.tablist.prepend(self.addButton);
+
+            if (tabsPanelWidth > self.tablist.width() - 36/*listButton和addButton*/) {
+                self.tabsPanel.append(self.tabs);
+                self.tablist.append(self.lastButton)
+                    .append(self.nextButton)
+                    .append(self.prevButton)
+                    .append(self.firstButton)
+                    .append(self.scrollPanel);
+
+                self.scrollPanel.width(self.tablist.width() - self.prevButton.outerWidth(true) - self.nextButton.outerWidth(true) - self.lastButton.outerWidth(true)
+                    - self.firstButton.outerWidth(true) - (options.hideAddBtn ? 0 : self.addButton.outerWidth(true)) - self.listButton.outerWidth(true) - 1);
+
+                self.tabsPanel.width(tabsPanelWidth * 2);
+
+                var currentLeft = self.tabsPanel.position().left - self.scrollPanel.position().left;
+                if (currentLeft > 0) currentLeft = 0;
+                currentLeft *= -1;
+
+                var scrollWidth = self.scrollPanel.width();
+                if (tabsPanelWidth < currentLeft + scrollWidth) {
+                    self.tabsPanel.css('left', (tabsPanelWidth - scrollWidth) * -1);
+                }
+                updateButtonState();
+                initialized = true;
+            }
+            $(window).bind('resize', handleResize);
+        }
+
+        function handleResize() {
+            if (resizeTimer)
+                clearTimeout(resizeTimer);
+            if (windowHeight != $(window).height() || windowWidth != $(window).width())
+                resizeTimer = setTimeout(reupdate, 100);
+        }
+
+        function reupdate() {
+            windowHeight = $(window).height();
+            windowWidth = $(window).width();
+            update();
+        }
+
+        function destroy() {
+            $(window).unbind('resize', handleResize);
+            var tabsI;
+            self.tabs.each(function (i) {
+                tabsI = $(this);
+                (tabsI.is(":hidden")) && self.tabs.splice(i, 1);
+            });
+            self.tablist.prepend(self.tabs);
+
+            self.scrollPanel.add(self.prevButton).add(self.nextButton).add(self.lastButton).add(self.firstButton).detach();
+            !options.hideAddBtn && self.addButton.detach();
+            self.listButton.detach();
+
+            initialized = false;
+        }
+
+        function updatePosition() {
+            var tabsPanelWidth = 0, selectedLeft = 0, selectedLi = 0;
+            self.tabs.each(function () {
+                if ($(this).hasClass('ui-tabs-active')) {
+                    selectedLeft = tabsPanelWidth;
+                    selectedLi = $(this);
+                }
+                tabsPanelWidth += $(this).outerWidth(true);
+            });
+
+            if (tabsPanelWidth > self.tablist.width()) {
+                var selectedWidth = selectedLi.outerWidth(true),
+                      currentLeft = self.tabsPanel.position().left - self.scrollPanel.position().left;
+                if (currentLeft > 0) currentLeft = 0;
+                currentLeft *= -1;
+
+                var scrollWidth = self.scrollPanel.width();
+                var targetLeft = -1;
+                if (scrollWidth > 0) {
+                    if (selectedLeft < currentLeft) {
+                        targetLeft = selectedLeft;
+                    } else if (selectedLeft + selectedWidth > currentLeft + scrollWidth) {
+                        if (selectedWidth > scrollWidth) {
+                            targetLeft = selectedLeft;
+                        } else {
+                            targetLeft = selectedLeft - scrollWidth + selectedWidth;
+                        }
+                    } else if (currentLeft + scrollWidth > tabsPanelWidth) {
+                        targetLeft = tabsPanelWidth - scrollWidth;
+                    }
+                    if (targetLeft >= 0) {
+                        self.tabsPanel.stop();
+                        self.tabsPanel.animate({ left: targetLeft * -1 }, 'slow');
+                    }
+                }
+            }
+        }
+
+        function updateButtonState(activeNum) {
+            var optActive = options.activeOnButtonClick ? self.option('active') : (updatePosition(), activeEx), tabCount = self.tabs.length;
+            activeNum && (optActive = activeNum);
+            if (optActive >= tabCount - 1) {
+                self.nextButton.add(self.lastButton).addClass("ui-tabs-paging-disabled");
+                self.prevButton.add(self.firstButton).removeClass("ui-tabs-paging-disabled");
+            } else if (optActive === 0) {
+                self.prevButton.add(self.firstButton).addClass("ui-tabs-paging-disabled");
+                self.nextButton.add(self.lastButton).removeClass("ui-tabs-paging-disabled");
+            } else {
+                self.nextButton.add(self.lastButton).add(self.prevButton).add(self.firstButton).removeClass("ui-tabs-paging-disabled");
+            }
+        }
+
+        var tabsRefresh = self.refresh;
+        self.refresh = function () {
+            if (initialized) {
+                destroy();
+            }
+            tabsRefresh.apply(this);
+            update();
+        };
+
+        var tabsOption = self.option;
+        self.option = function (key, value) {
+            var retVal = value ? tabsOption.apply(this, [key, value]) : tabsOption.apply(this, [key]);
+            if (key === "active" || ($.isPlainObject(key) && key.active)) {
+                updatePosition();
+            }
+            return retVal;
+        };
+
+        self.add = function (opts) {
+            opts = opts || {};
+            var href = opts.href || "javascript:;", activeOnAdd = opts.activeOnAdd || false;
+            $("<li/>", opts.liAttr || {}).wrapInner($("<a/>", {
+                href: href,
+                text: opts.text || ""
+            })).appendTo(self.tablist);
+            self.refresh();
+            activeOnAdd && self.element.tabs({ active: self.tabs.length - 1 });
+        };
+
+        var tabsActivate = self.options.activate;
+        self.options.activate = function (event, ui) {
+            tabsActivate.apply(this, [event, ui]);
+            updateButtonState(self.option('active'));
+        };
+
+        $.extend($.ui.tabs.prototype, {
+            pagingDestroy: function () {
+                destroy();
+            },
+            pagingUpdate: function () {
+                reupdate();
+            }
+        });
+
+        init();
+        update();
+    }
+});
